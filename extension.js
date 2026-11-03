@@ -320,12 +320,17 @@ class EpubEditorProvider {
       try {
         return await job.promise;
       } catch (error) {
-        if (handle.cancelled || !isRateLimitError(error) || attempt === waits.length) {
+        if (handle.cancelled || !isRetryableTtsError(error) || attempt === waits.length) {
           throw error;
         }
-        this._log(`Edge TTS rate limited, retry in ${waits[attempt]}ms`);
-        await webview.postMessage({ type: "ttsStatus", id, text: "Edge 语音限流了，正在等待后重试。" });
-        await cancellableDelay(waits[attempt], handle);
+        const limited = isRateLimitError(error);
+        this._log(`Edge TTS retry in ${waits[attempt]}ms: ${readableError(error)}`);
+        await webview.postMessage({
+          type: "ttsStatus",
+          id,
+          text: limited ? "Edge 语音限流了，正在等待后重试。" : "Edge 语音连得不稳定，正在重试。",
+        });
+        await cancellableDelay(limited ? waits[attempt] : Math.min(waits[attempt], 2000), handle);
       }
     }
     throw new Error("Edge 语音暂时限流");
@@ -523,9 +528,20 @@ function isRateLimitError(error) {
   return /429|too many requests|rate limit/i.test(readableError(error));
 }
 
+function isNetworkError(error) {
+  return /TLS|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|socket disconnected|代理|语音连接已断开/i.test(readableError(error));
+}
+
+function isRetryableTtsError(error) {
+  return isRateLimitError(error) || isNetworkError(error);
+}
+
 function speakError(error) {
   if (isRateLimitError(error)) {
     return "Edge 语音暂时限流，请等一两分钟，或先改用系统语音。";
+  }
+  if (isNetworkError(error)) {
+    return "连不上 Edge 语音。请确认代理已打开，或改用系统语音。";
   }
   return readableError(error);
 }
