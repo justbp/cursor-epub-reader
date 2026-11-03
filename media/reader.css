@@ -250,6 +250,24 @@ body.chrome-hidden .reader-body {
   display: none;
 }
 
+.listen-from-here {
+  position: fixed;
+  z-index: 70;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+  font: 700 12px/1 sans-serif;
+  cursor: pointer;
+}
+
+.listen-from-here[hidden] {
+  display: none;
+}
+
 .listen-field {
   display: grid;
   gap: 4px;

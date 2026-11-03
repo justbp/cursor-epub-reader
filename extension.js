@@ -338,8 +338,8 @@ class EpubEditorProvider {
 
   _html(webview, payload) {
     const nonce = createNonce();
-    const stylesUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", "reader.css")).with({ query: "v=listen-voice-1" });
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", "reader.js")).with({ query: "v=listen-voice-1" });
+    const stylesUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", "reader.css")).with({ query: "v=listen-from-1" });
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", "reader.js")).with({ query: "v=listen-from-1" });
     const data = safeJson(payload);
     const chapterLang = payload && payload.book && payload.book.language
       ? String(payload.book.language).replace(/[^A-Za-z0-9-]/g, "")

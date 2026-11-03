@@ -116,6 +116,8 @@ const listen = {
   heldEdge: null,
   sessionAudio: null,
   sessionBound: false,
+  pendingStart: null,
+  savedStart: null,
 };
 
 try {
@@ -140,6 +142,7 @@ function bootstrapReader() {
   updateChromeVisibility();
   updateImageVisibility();
   bindListenControls();
+  bindListenStart();
   bindMediaSession();
 
   renderToc();
@@ -335,6 +338,8 @@ function renderCurrentChapter(options = {}) {
 
   pauseEdgeNavigation();
   hideMessage();
+  listen.savedStart = null;
+  hideListenFromButton();
   elements.article.innerHTML = chapter.html || "";
   applySearch();
 
@@ -1026,6 +1031,10 @@ function startListen() {
   if (!initial.book || !initial.book.chapters.length) {
     return;
   }
+  const start = listen.pendingStart || captureListenStart() || connectedStart(listen.savedStart);
+  listen.pendingStart = null;
+  listen.savedStart = null;
+  hideListenFromButton();
   listen.active = true;
   listen.paused = false;
   listen.run += 1;
@@ -1037,10 +1046,34 @@ function startListen() {
   if (!elements.message.hidden || !(elements.article.innerText || "").trim()) {
     return;
   }
-  beginListenBlocks(listen.run);
+  beginListenBlocks(listen.run, start);
   if (state.listenEngine === "system") {
     armSystemKeepalive();
   }
+}
+
+function listenFromSelection(start) {
+  if (!start) {
+    return;
+  }
+  listen.pendingStart = start;
+  if (listen.active) {
+    listen.savedStart = null;
+    hideListenFromButton();
+    listen.paused = false;
+    listen.heldEdge = null;
+    listen.run += 1;
+    stopListenPlayback();
+    const chosen = listen.pendingStart;
+    listen.pendingStart = null;
+    beginListenBlocks(listen.run, chosen);
+    if (state.listenEngine === "system") {
+      armSystemKeepalive();
+    }
+    updateListenButton();
+    return;
+  }
+  startListen();
 }
 
 function stopListen() {
@@ -1078,7 +1111,7 @@ function restartListenSettings() {
   }
 }
 
-function beginListenBlocks(run) {
+function beginListenBlocks(run, start) {
   if (!isListenRun(run)) {
     return;
   }
@@ -1086,9 +1119,13 @@ function beginListenBlocks(run) {
   listen.paused = false;
   listen.heldEdge = null;
   listen.blocks = collectListenBlocks();
-  listen.index = 0;
-  listen.nextRequest = 0;
+  const located = start ? applyListenStart(listen.blocks, start) : { index: 0, moved: false };
+  listen.index = located.index;
+  listen.nextRequest = located.index;
   listen.queue = [];
+  if (located.moved) {
+    setListenHint("从选中的位置开始朗读。");
+  }
   if (!listen.blocks.length) {
     listen.emptySkips += 1;
     if (listen.emptySkips > 8) {
@@ -1187,6 +1224,181 @@ function spokenText(element) {
 
 function isNavLabel(text) {
   return /^(后页|前页|目录|下页|上页|下一页|上一页|返回|回目录|首页)$/.test(String(text || "").replace(/\s+/g, ""));
+}
+
+function bindListenStart() {
+  const button = ensureListenFromButton();
+  button.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    listen.pendingStart = captureListenStart() || connectedStart(listen.savedStart);
+  });
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    listenFromSelection(listen.pendingStart || connectedStart(listen.savedStart));
+  });
+  if (elements.listenToggle) {
+    elements.listenToggle.addEventListener("pointerdown", () => {
+      if (!listen.active) {
+        listen.pendingStart = captureListenStart() || connectedStart(listen.savedStart);
+      }
+    }, true);
+  }
+  document.addEventListener("selectionchange", () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!elements.article.contains(range.startContainer)) {
+      return;
+    }
+    listen.savedStart = { node: range.startContainer, offset: range.startOffset };
+    placeListenFromButton(range);
+  });
+  elements.article.addEventListener("pointerup", () => {
+    const captured = captureListenStart();
+    listen.savedStart = captured;
+    if (!captured) {
+      hideListenFromButton();
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    if (target.closest("#listenToggle") || target.closest("#listenFromHere") || target.closest("#article")) {
+      return;
+    }
+    listen.savedStart = null;
+    hideListenFromButton();
+  }, true);
+  elements.readingPane.addEventListener("scroll", () => {
+    hideListenFromButton();
+  }, { passive: true });
+}
+
+function ensureListenFromButton() {
+  let button = document.getElementById("listenFromHere");
+  if (!button) {
+    button = document.createElement("button");
+    button.id = "listenFromHere";
+    button.type = "button";
+    button.className = "listen-from-here";
+    button.textContent = "从这里读";
+    button.hidden = true;
+    document.body.appendChild(button);
+  }
+  return button;
+}
+
+function placeListenFromButton(range) {
+  const button = ensureListenFromButton();
+  const rect = range.getBoundingClientRect();
+  if (!rect || (rect.width === 0 && rect.height === 0)) {
+    button.hidden = true;
+    return;
+  }
+  button.hidden = false;
+  const width = 84;
+  button.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
+  button.style.top = `${Math.max(8, rect.top - 34)}px`;
+}
+
+function hideListenFromButton() {
+  const button = document.getElementById("listenFromHere");
+  if (button) {
+    button.hidden = true;
+  }
+}
+
+function captureListenStart() {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  if (!elements.article.contains(range.startContainer)) {
+    return null;
+  }
+  if (!flatText(selection.toString())) {
+    return null;
+  }
+  return { node: range.startContainer, offset: range.startOffset };
+}
+
+function connectedStart(start) {
+  if (!start || !start.node || !start.node.isConnected || !elements.article.contains(start.node)) {
+    return null;
+  }
+  return start;
+}
+
+function applyListenStart(blocks, start) {
+  const node = start && start.node;
+  if (!node || !node.isConnected) {
+    return { index: 0, moved: false };
+  }
+  const index = blocks.findIndex((block) => block.el.contains(node));
+  if (index < 0) {
+    return { index: 0, moved: false };
+  }
+  const element = blocks[index].el;
+  let prefix = "";
+  try {
+    prefix = flatText(textBefore(element, node, start.offset));
+  } catch {
+    return { index, moved: index > 0 };
+  }
+  let seen = 0;
+  for (let cursor = index; cursor < blocks.length && blocks[cursor].el === element; cursor += 1) {
+    const piece = flatText(blocks[cursor].text);
+    if (prefix.length <= seen + piece.length) {
+      const cut = prefix.length - seen;
+      if (cut <= 0) {
+        return { index: cursor, moved: cursor > 0 };
+      }
+      const sliced = sliceAfterFlat(blocks[cursor].text, cut);
+      if (!sliced) {
+        return { index: cursor + 1, moved: true };
+      }
+      blocks[cursor].text = sliced;
+      return { index: cursor, moved: true };
+    }
+    seen += piece.length;
+  }
+  return { index, moved: index > 0 };
+}
+
+function textBefore(element, node, offset) {
+  const range = document.createRange();
+  range.setStart(element, 0);
+  range.setEnd(node, offset);
+  const holder = document.createElement("div");
+  holder.appendChild(range.cloneContents());
+  return spokenText(holder);
+}
+
+function flatText(text) {
+  return String(text || "").replace(/\s+/g, "");
+}
+
+function sliceAfterFlat(text, count) {
+  if (count <= 0) {
+    return String(text || "").trim();
+  }
+  let seen = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    if (/\s/.test(text[index])) {
+      continue;
+    }
+    seen += 1;
+    if (seen >= count) {
+      return text.slice(index + 1).trim();
+    }
+  }
+  return "";
 }
 
 function splitSpeakable(text) {
@@ -1482,7 +1694,7 @@ function updateListenButton() {
   elements.listenToggle.textContent = listen.active ? "停" : "听";
   elements.listenToggle.setAttribute("aria-pressed", listen.active ? "true" : "false");
   if (!listen.active) {
-    elements.listenToggle.title = `朗读本书（${engine}）。朗读时可用键盘播放/暂停键`;
+    elements.listenToggle.title = `朗读本书（${engine}）。先选中文字再点，会从选中处开始`;
   } else if (listen.paused) {
     elements.listenToggle.title = `已暂停（${engine}）。按播放键继续，再按此按钮停止`;
   } else {
