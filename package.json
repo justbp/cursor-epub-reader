@@ -1,0 +1,101 @@
+{
+	"name": "z-epub-reader",
+	"displayName": "Cursor EPUB Reader",
+	"description": "Read EPUB books in Cursor/VS Code, with table of contents and read-aloud via system voices or Edge TTS.",
+	"version": "0.3.0",
+	"publisher": "justbp",
+	"license": "MIT",
+	"icon": "media/icon.png",
+	"homepage": "https://github.com/justbp/cursor-epub-reader",
+	"bugs": {
+		"url": "https://github.com/justbp/cursor-epub-reader/issues"
+	},
+	"qna": false,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/justbp/cursor-epub-reader.git"
+	},
+	"galleryBanner": {
+		"color": "#1f2937",
+		"theme": "dark"
+	},
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": [
+		"Education",
+		"Other"
+	],
+	"keywords": [
+		"cursor",
+		"vscode",
+		"epub",
+		"epub-reader",
+		"ebook-reader",
+		"ebook",
+		"e-book",
+		"book",
+		"books",
+		"reading",
+		"reader",
+		"custom-editor"
+	],
+	"activationEvents": [
+		"onCustomEditor:cursorEpub.reader",
+		"onCommand:cursorEpub.openFile",
+		"onCommand:cursorEpub.reopenAsReader",
+		"onCommand:cursorEpub.clearReadingState"
+	],
+	"main": "./extension.js",
+	"contributes": {
+		"customEditors": [
+			{
+				"viewType": "cursorEpub.reader",
+				"displayName": "EPUB Reader",
+				"selector": [
+					{
+						"filenamePattern": "*.epub"
+					}
+				],
+				"priority": "default"
+			}
+		],
+		"commands": [
+			{
+				"command": "cursorEpub.openFile",
+				"title": "EPUB Reader: Open EPUB"
+			},
+			{
+				"command": "cursorEpub.reopenAsReader",
+				"title": "EPUB Reader: Reopen With Reader"
+			},
+			{
+				"command": "cursorEpub.clearReadingState",
+				"title": "EPUB Reader: Clear Reading State"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "cursorEpub.openFile",
+					"when": "resourceExtname == .epub",
+					"group": "navigation@1"
+				}
+			],
+			"editor/title/context": [
+				{
+					"command": "cursorEpub.reopenAsReader",
+					"when": "resourceExtname == .epub",
+					"group": "navigation@1"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"lint": "node --check extension.js && node --check lib/zip.js && node --check lib/epub.js && node --check lib/edge-tts.js && node --check lib/edge-drm.js && node --check media/reader.js",
+		"package": "vsce package"
+	},
+	"dependencies": {
+		"ws": "8.18.3"
+	}
+}
